@@ -17,13 +17,18 @@
  */
 
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { complete } from "@earendil-works/pi-ai/compat";
 import { getAgentDir, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 const WIDGET_KEY = "session-recap";
-/** Keeps the recap request bounded on very long sessions. */
-const MAX_CONVERSATION_CHARS = 12_000;
+/**
+ * Keeps the recap request bounded. OMP sends the whole conversation through an
+ * ephemeral turn; this stands in for that while staying inside a sane prompt size.
+ */
+const MAX_CONVERSATION_CHARS = 60_000;
+/** Per-message cap so one long message cannot crowd out the rest. */
+const MAX_MESSAGE_CHARS = 2_000;
 /** Idle bounds mirror OMP's clamp so a bad config cannot arm an absurd timer. */
 const MIN_IDLE_SECONDS = 1;
 const MAX_IDLE_SECONDS = 3_600;
@@ -32,6 +37,7 @@ export interface RecapConfig {
 	enabled: boolean;
 	idleSeconds: number;
 	maxChars: number;
+	maxConversationChars: number;
 	maxTokens: number;
 	/** Set the session name from the generated title when the session has none. */
 	sessionTitle: boolean;
@@ -44,6 +50,7 @@ export const RECAP_DEFAULTS: RecapConfig = {
 	enabled: true,
 	idleSeconds: 240,
 	maxChars: 280,
+	maxConversationChars: MAX_CONVERSATION_CHARS,
 	maxTokens: 200,
 	sessionTitle: true,
 };
@@ -131,11 +138,11 @@ export function buildConversation(entries: readonly SessionEntry[], maxChars = M
 		const role = entry.message.role;
 		const text = renderContent(entry.message.content).trim();
 		if (role === "user") {
-			if (text) lines.push(`User: ${collapseLine(text, 600)}`);
+			if (text) lines.push(`User: ${collapseLine(text, MAX_MESSAGE_CHARS)}`);
 		} else if (role === "assistant") {
-			if (text) lines.push(`Assistant: ${collapseLine(text, 600)}`);
+			if (text) lines.push(`Assistant: ${collapseLine(text, MAX_MESSAGE_CHARS)}`);
 		} else if (role === "compactionSummary" || role === "branchSummary") {
-			if (text) lines.push(`[earlier summary: ${collapseLine(text, 600)}]`);
+			if (text) lines.push(`[earlier summary: ${collapseLine(text, MAX_MESSAGE_CHARS)}]`);
 		}
 	}
 	// Walk backwards so the newest context survives the budget.
@@ -150,8 +157,62 @@ export function buildConversation(entries: readonly SessionEntry[], maxChars = M
 	return kept.join("\n");
 }
 
-export default function sessionRecap(pi: ExtensionAPI) {
-	let config: RecapConfig = { ...RECAP_DEFAULTS };
+/** pi-tasks names its per-session file after the session file's id suffix. */
+export function sessionIdFromFile(sessionFile: string | undefined): string | undefined {
+	if (!sessionFile) return undefined;
+	const base = basename(sessionFile).replace(/\.jsonl$/, "");
+	const index = base.lastIndexOf("_");
+	if (index === -1) return undefined;
+	return base.slice(index + 1) || undefined;
+}
+
+/** Mirrors pi-tasks' encoding of a workspace path into one directory name. */
+export function projectKey(cwd: string): string {
+	return `--${resolve(cwd).replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`;
+}
+
+/**
+ * OMP anchors the recap on the active todo task. pi-tasks owns that list, so read
+ * its session file directly and stay best-effort: a missing or malformed file
+ * must never break the recap.
+ */
+export function readNextTask(
+	cwd: string,
+	agentDir: string,
+	sessionFile: string | undefined,
+): string | undefined {
+	const id = sessionIdFromFile(sessionFile);
+	if (!id) return undefined;
+	const candidates = [
+		join(cwd, ".pi", "tasks", `tasks-${id}.json`),
+		join(agentDir, "tasks", "sessions", projectKey(cwd), `tasks-${id}.json`),
+	];
+	for (const path of candidates) {
+		try {
+			if (!existsSync(path)) continue;
+			const parsed: unknown = JSON.parse(readFileSync(path, "utf-8"));
+			const tasks = (parsed as { tasks?: unknown } | null)?.tasks;
+			if (!Array.isArray(tasks)) continue;
+			const next = tasks.find((task) => {
+				const status = (task as { status?: unknown } | null)?.status;
+				return status === "in_progress" || status === "pending";
+			});
+			const subject = (next as { subject?: unknown } | null)?.subject;
+			if (typeof subject === "string" && subject.trim()) return collapseLine(subject, 120);
+			return undefined;
+		} catch {
+			// Unreadable task state is not worth surfacing; the recap still works.
+		}
+	}
+	return undefined;
+}
+
+/** Truncate to what the widget can actually show, so the line cannot wrap. */
+export function displayWidth(maxChars: number, columns = process.stdout.columns || 120): number {
+	return Math.max(40, Math.min(maxChars, columns - 4));
+}
+
+export default function sessionRecap(pi: ExtensionAPI) {	let config: RecapConfig = { ...RECAP_DEFAULTS };
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	let abort: AbortController | undefined;
 	/** Bumped by every cancel; a reply from an older generation is discarded. */
@@ -207,14 +268,22 @@ export default function sessionRecap(pi: ExtensionAPI) {
 		if (!model) return;
 
 		const entries = ctx.sessionManager.getBranch() as readonly SessionEntry[];
-		const conversation = buildConversation(entries);
+		const conversation = buildConversation(entries, config.maxConversationChars);
 		if (!conversation.trim()) return;
 
 		const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
 		if (!auth?.ok || !auth.apiKey) return;
 
 		const name = pi.getSessionName()?.trim();
-		const prompt = [name ? `Overall goal: ${name}` : "", "<conversation>", conversation, "</conversation>", RECAP_PROMPT]
+		const task = readNextTask(ctx.cwd, getAgentDir(), ctx.sessionManager.getSessionFile());
+		const prompt = [
+			name ? `Overall goal: ${name}` : "",
+			task ? `Active task: ${task}` : "",
+			"<conversation>",
+			conversation,
+			"</conversation>",
+			RECAP_PROMPT,
+		]
 			.filter(Boolean)
 			.join("\n");
 
@@ -244,7 +313,7 @@ export default function sessionRecap(pi: ExtensionAPI) {
 				.map((c) => c.text)
 				.join("\n");
 			const { title, recap } = parseRecapReply(raw);
-			const line = collapseLine(recap, config.maxChars);
+			const line = collapseLine(recap, displayWidth(config.maxChars));
 			if (!line) return;
 			// Conditions may have changed while the request was in flight.
 			if (!idleConditionsHold(ctx)) return;

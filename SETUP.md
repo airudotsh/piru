@@ -191,6 +191,7 @@ rather see the name only in the terminal title.
   "enabled": true,
   "idleSeconds": 240,
   "maxChars": 280,
+  "maxConversationChars": 60000,
   "maxTokens": 200,
   "sessionTitle": true,
   "provider": "antigravity",
@@ -200,9 +201,14 @@ rather see the name only in the terminal title.
 
 Every field is optional. `session-recap.ts` waits `idleSeconds` after a run
 settles, then asks the model for a ~5-word title and a short plain recap. It
-collapses whitespace and truncates to `maxChars`, so the line can never wrap.
-Leave `provider`/`model` unset to use the session's active model. Set
+collapses whitespace and truncates to the terminal width, so the line can never
+wrap. Leave `provider`/`model` unset to use the session's active model. Set
 `sessionTitle: false` to skip naming the session. `/recap` forces one now.
+
+Like OMP, the request is anchored on the session name and on the next unfinished
+`pi-tasks` task, which the extension reads from that session's task file (best
+effort — a missing or malformed file is ignored). `maxConversationChars` bounds
+how much history is sent.
 
 ### `web-search.json` — stop the curator from stealing the browser
 
