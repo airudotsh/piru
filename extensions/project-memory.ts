@@ -30,11 +30,13 @@ export default async function projectMemory(pi: ExtensionAPI): Promise<void> {
 		PI_MEMORY_SNAPSHOT: "stable",
 		PI_MEMORY_EXIT_SUMMARY: "0",
 		PI_MEMORY_SUMMARIZE_TRANSITIONS: "0",
-		PI_MEMORY_QMD_UPDATE: "off",
-		PI_MEMORY_NO_SEARCH: "1",
+		PI_MEMORY_QMD_UPDATE: "background",
+		PI_MEMORY_QMD_SEARCH_TIMEOUT_MS: "180000",
+		QMD_CONFIG_DIR: join(store, ".qmd"),
+		INDEX_PATH: join(store, ".qmd", "index.sqlite"),
 	});
 	const memory = await import(join(agentDir, "npm", "node_modules", "pi-memory", "index.ts"));
-	mkdirSync(store, { recursive: true });
+	mkdirSync(join(store, ".qmd"), { recursive: true });
 	const marker = join(store, ".project.json");
 	const identity = `${JSON.stringify({ projectRoot: root, memoryDir: store }, null, 2)}\n`;
 	if (!existsSync(marker) || readFileSync(marker, "utf8") !== identity) {

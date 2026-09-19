@@ -1,6 +1,7 @@
 # Setup — rebuild this Pi configuration on a new machine
 
-Step-by-step. Values below are what this machine runs; adjust where noted.
+Step-by-step. Examples reflect the current setup, but are not a full machine backup;
+adjust personal choices where noted.
 **No secrets are stored here** — every key is either entered via `/login` or read
 from a file on the machine.
 
@@ -9,7 +10,7 @@ from a file on the machine.
 ## 0. Prerequisites
 
 ```bash
-node --version     # 22+
+node --version     # 22.13+ for the included tests
 pi --version       # 0.85+
 ```
 
@@ -20,8 +21,10 @@ Pi itself: see the official quickstart. Install method does not matter here.
 ## 1. Packages
 
 ```bash
-./setup.sh --dry-run   # preview
-./setup.sh             # install + copy local extensions
+./setup.sh --dry-run                  # preview, no writes
+./setup.sh                            # packages + adapters + MCP
+./setup.sh --with-memory-search       # also install QMD if absent
+./setup.sh --no-mcp                   # skip MCP installation
 ```
 
 Or manually, one line each (`packages.txt` has the same list):
@@ -40,6 +43,11 @@ pi install git:github.com/NVlabs/SoL-Pi@bd005888b9b8a3fcdb511feb91fc27d3dfa8f2b1
 pi install npm:@narumitw/pi-plan-mode
 pi install npm:@tintinweb/pi-tasks
 ```
+
+The installer disables the pi-memory package's own extension entry: only the local
+adapter must load it, after choosing the project's memory directory. It backs up
+`settings.json` before making this narrow change and preserves unrelated settings.
+For manual installation, apply the package filter shown in §4 before starting Pi.
 
 ### Why each one
 
@@ -115,8 +123,12 @@ or auth from `/login`.
       "api": "openai-responses",
       "authHeader": true,
       "models": [
-        { "id": "deepseek-v4.1-flash", "reasoning": true,
-          "thinkingLevelMap": { "off": "none", "low": "low", "high": "high", "max": "max" },
+        { "id": "deepseek-v4.1-flash", "api": "openai-completions", "reasoning": true,
+          "compat": { "supportsStore": false, "supportsDeveloperRole": false,
+                      "supportsReasoningEffort": true, "maxTokensField": "max_tokens",
+                      "thinkingFormat": "deepseek", "requiresReasoningContentOnAssistantMessages": true },
+          "thinkingLevelMap": { "off": "none", "minimal": null, "low": "low",
+                                "medium": null, "high": "high", "xhigh": null, "max": "max" },
           "contextWindow": 1000000, "maxTokens": 384000,
           "cost": { "input": 0.015, "output": 0.06, "cacheRead": 0.0003, "cacheWrite": 0.015 } }
       ]
@@ -127,7 +139,9 @@ or auth from `/login`.
 
 **`thinkingLevelMap` matters.** Without it Pi assumes `off`…`high` are supported and
 hides `max`. If the provider actually only supports `low`/`high`/`max` (as b.ai does),
-declare it — otherwise `max` is unreachable and `medium` is sent as an unsupported value.
+declare supported levels and mark unsupported levels `null`. Verify the provider's
+actual supported levels. The `cost` fields are local display metadata, **not proof of
+actual billing or a free subscription**; confirm prices with the provider.
 
 `apiKey` can be a literal, `$ENV_VAR`, or `!command` (e.g. `!cat ~/.bai-api-key`).
 **Prefer `/login`** — omit `apiKey` entirely and Pi reads `auth.json` instead.
@@ -186,6 +200,39 @@ This keeps it from launching one (the URL is still printed if you want it).
 { "app.message.followUp": ["ctrl+enter", "alt+enter"] }
 ```
 
+### `subagents.json` — optional workflow and description settings
+
+```json
+{ "workflowsEnabled": false, "toolDescriptionMode": "compact" }
+```
+
+This disables scripted `SubagentWorkflow`, not ordinary `Agent` delegation,
+background execution, steering, or resume. Compact mode shortens the Agent tool's
+description; do not assume a fixed token saving across versions. Fully restart Pi
+to verify the loaded tools after changing it. This example is not auto-installed.
+
+The current delegation preference is `bai/deepseek-v4.1-flash` with high thinking.
+It is an instruction, not a change to the main model or to all agent profiles.
+With the installed `Agent` tool, use separate `model` and `thinking` arguments.
+A profile-pinned model takes precedence over a call's model argument. Model lookup
+fallback is not API-error failover: b.ai → opencode-go → parent is **not** an
+installed automatic runtime chain.
+
+### `sol-pi.json` — observation archives only
+
+```json
+{
+  "version": 1,
+  "actionFusion": false,
+  "observationPack": true,
+  "evidencePreservingReducer": false,
+  "onlineContextCompact": false
+}
+```
+
+ObservationPack archives large tool results for `obs_recall`. It is separate from
+project memory and from the terminal's visual output folding.
+
 ### `APPEND_SYSTEM.md` — additions to Pi's system prompt
 
 Plain Markdown appended to the system prompt. This machine keeps its own rules there
@@ -196,8 +243,9 @@ every request.
 
 ## 4. Local extensions
 
-Pi has no package for these two, so they are copied from `extensions/` into
-`~/.pi/agent/extensions/` by `setup.sh`.
+These two local adapters are copied from `extensions/` into
+`~/.pi/agent/extensions/` by `setup.sh`. The last-model code also has a standalone
+source repository at <https://github.com/airudotsh/pi-last-model>.
 
 | File | Why it exists |
 |---|---|
@@ -206,14 +254,74 @@ Pi has no package for these two, so they are copied from `extensions/` into
 
 Notes:
 - `last-model.ts` skips restoration when you launch with `--model` / `--provider`.
-- `project-memory.ts` sets `PI_MEMORY_*` env vars before importing `pi-memory`, and
-  throws if the memory scope changes mid-process (restart Pi when switching projects).
+- `project-memory.ts` sets its environment before importing `pi-memory`, and
+  rejects a different memory scope in the same adapter instance. Fully restart Pi
+  when switching projects; do not rely on `/reload` to clear imported module state.
+
+### Memory search and isolation
+
+The store is `~/.pi/agent/memory/projects/<sha256(project-root)>/`. The adapter uses
+the nearest directory containing `.git` (a directory or worktree file), falling
+back to the real launch directory outside Git. Different worktrees and moved
+projects have different stores. `.project.json` records the local identity.
+
+Keep pi-memory installed but disable its direct extension in `settings.json`:
+
+```json
+{
+  "packages": [
+    { "source": "npm:pi-memory@0.4.2", "extensions": [] }
+  ]
+}
+```
+
+This is a fragment: preserve all your other package entries. `setup.sh` applies it
+automatically. Without the filter, the global package can initialize before the
+adapter sets the scope and can register duplicate memory tools.
+
+The current adapter sets:
+
+| Setting | Value / purpose |
+|---|---|
+| `PI_MEMORY_SNAPSHOT` | `stable` — stable prompt snapshots, not per-prompt search injection |
+| `PI_MEMORY_EXIT_SUMMARY` / `PI_MEMORY_SUMMARIZE_TRANSITIONS` | `0` — no automatic model summaries on exit or transition |
+| `PI_MEMORY_QMD_UPDATE` | `background` — index and embed after writes |
+| `PI_MEMORY_QMD_SEARCH_TIMEOUT_MS` | `180000` — allow local searches up to three minutes |
+| `QMD_CONFIG_DIR` | `<store>/.qmd` — per-project QMD collection configuration |
+| `INDEX_PATH` | `<store>/.qmd/index.sqlite` — per-project search index |
+
+QMD **2.8.3** is the reference version. Install with
+`./setup.sh --with-memory-search`, or `npm install -g @tobilu/qmd@2.8.3`.
+The installer keeps an existing QMD version rather than replacing it. Without QMD,
+file-based memory still works; `memory_search` reports the missing dependency.
+QMD uses local models: first-time downloads, indexing, and embedding may consume
+substantial disk, CPU, and time. Model downloads are shared; project indexes are not.
+
+After a full Pi restart, use `memory_status` to verify the directory, QMD collection,
+embeddings, background updates, and 180000 ms timeout. Search exact terms first,
+then use semantic/deep search when helpful and read the matching source. With
+stable snapshots, the agent must explicitly request recall; no automatic search
+runs for every user prompt.
+
+If indexing is incomplete, do not interpret an empty result as missing memory.
+Use the store path reported by `memory_status` to target a manual refresh:
+
+```bash
+STORE="<absolute memory directory reported by memory_status>"
+QMD_CONFIG_DIR="$STORE/.qmd" INDEX_PATH="$STORE/.qmd/index.sqlite" qmd update
+QMD_CONFIG_DIR="$STORE/.qmd" INDEX_PATH="$STORE/.qmd/index.sqlite" qmd embed
+```
+
+Do not run bare QMD refresh commands expecting them to select the Pi project's
+index. Do not commit memory contents, `.project.json`, SQLite indexes, sessions,
+or downloaded models to this repository.
 
 ---
 
 ## 5. Instructions and prompts
 
-Pi reads instructions from three places. This machine uses the first two.
+Instructions and reusable prompt templates have different discovery paths.
+This snapshot uses `APPEND_SYSTEM.md`; project instructions depend on the repository.
 
 ### `~/.pi/agent/APPEND_SYSTEM.md` — personal, always on
 
@@ -250,12 +358,14 @@ Keep it short — every line rides on every request. Start minimal:
 
 ### `AGENTS.md` — project-level, discovered automatically
 
-Pi loads `AGENTS.md` from the working directory and ancestor directories (up to the
-git root), plus `~/.agents/AGENTS.md` globally. Project rules override global ones.
-Use it for repo conventions: branch policy, test commands, record-keeping.
+Pi loads `AGENTS.md` or `CLAUDE.md` from the working directory and ancestors,
+plus `~/.pi/agent/AGENTS.md` for global instructions. `AGENTS.override.md` replaces
+the normal context file from its directory. Use project instructions for branch
+policy, test commands, and record-keeping.
 
-On this machine the global one lives in a **shared network mount**
-(`~/.agents/AGENTS.md`), edited on the host that owns it — not a local file.
+`~/.agents/AGENTS.md` is **not** Pi's documented global instruction path. Do not
+count it as injected merely because that file exists. This is distinct from
+`~/.agents/skills/`, which Pi does discover for skills.
 
 ### Prompt templates — `/name` shortcuts (not used here)
 
@@ -289,14 +399,29 @@ After a restart:
 
 | Check | Expected |
 |---|---|
-| `/plan` | enters read-only plan mode; edits blocked except the plan file |
+| `/plan <request>` | starts planning; review before implementation; planning tools enforce the active mode |
 | `/plan export` | writes the plan to a Markdown file |
 | `/tasks` | task widget above the editor; `blocked by` shows dependencies |
-| `/agents` | subagent list with a model column |
+| `/agents` | subagent list; scripted Workflows absent if the optional setting above is applied |
 | `/mcp` | macos-computer-use, 146 tools |
 | `/open-tui` | footer/telemetry settings |
 | paste image (`ctrl+v`) | thumbnail above the editor |
 | `/settings` | theme, default model |
+| `memory_status` | correct project store; QMD ready if installed; background update; 180000 ms timeout |
+| `memory_search` | search a non-sensitive fact already saved in this project's memory |
+
+For everyday work: use `/plan <request>` when you want to review the approach;
+use a normal request for small fixes and questions. The main agent manages Tasks
+and decides when to delegate. Plan approval does not automatically generate Tasks,
+and reminders do not block implementation. pi-tasks defaults to clearing an
+all-completed list after four turns or at the next post-run task batch.
+
+Repository checks (temporary fixtures only; no API calls or real installation):
+
+```bash
+bash -n setup.sh
+node --test tests/*.test.mjs
+```
 
 ## 7. Notes on this snapshot
 - `auth.json` is never shared.

@@ -5,6 +5,7 @@
 #   ./setup.sh            # install everything
 #   ./setup.sh --dry-run  # show what would change, touch nothing
 #   ./setup.sh --no-mcp   # skip MCP server installation
+#   ./setup.sh --with-memory-search  # also install QMD if absent (local model downloads later)
 #
 # Personal choices (which model, which instructions, which skills) are NOT set
 # here. See SETUP.md.
@@ -15,10 +16,13 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 AGENT_DIR="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"
 DRY=0
 SKIP_MCP=0
+MEMORY_SEARCH=0
 for arg in "$@"; do
   case "$arg" in
     --dry-run) DRY=1 ;;
     --no-mcp)  SKIP_MCP=1 ;;
+    --with-memory-search) MEMORY_SEARCH=1 ;;
+    *) printf 'Unknown option: %s\n' "$arg" >&2; exit 2 ;;
   esac
 done
 
@@ -37,6 +41,24 @@ while IFS= read -r pkg; do
   case "$pkg" in \#*) continue ;; esac
   run "pi install '$pkg'"
 done < "$HERE/packages.txt"
+
+# Prevent the package and adapter from registering the same memory tools twice.
+if [ "$DRY" = 1 ]; then
+  say "[dry] disable direct pi-memory extensions in $AGENT_DIR/settings.json (backup before changing)"
+else
+  node "$HERE/scripts/configure-memory.mjs" "$AGENT_DIR"
+fi
+
+if [ "$MEMORY_SEARCH" = 1 ]; then
+  if have qmd; then
+    say "QMD already installed — keeping the existing version"
+  else
+    say "QMD search: first embedding/semantic use may download large local models and use CPU/disk"
+    run "npm install -g @tobilu/qmd@2.8.3"
+  fi
+else
+  say "QMD not installed by default; add --with-memory-search for local memory search"
+fi
 
 # ── 2. local extensions ──────────────────────────────────────────────
 echo
@@ -91,5 +113,6 @@ cat <<'NOTES'
      not functional, so they are not installed here
    - extra MCP servers: declare them in mcp.json with their own command
 
-Restart Pi, then check /plan, /tasks, /agents, /mcp.
+Fully restart Pi, then check /plan, /tasks, /agents, /mcp and memory_status.
+Memory files and indexes are never copied by this installer.
 NOTES

@@ -10,8 +10,10 @@ extensions, and the settings worth copying.
 ./setup.sh             # packages + local extensions + MCP server
 ```
 
-That one command restores everything **functional**. Personal choices — which model,
-your instructions, your skills — are documented in SETUP.md but not installed.
+This installs the packages, local adapters, and MCP server. Add
+`--with-memory-search` to install QMD for local memory search (if absent).
+Personal choices — models, instructions, skills, and optional UI/tool settings —
+are documented in SETUP.md but not installed. Memory contents are never copied.
 
 ---
 
@@ -29,9 +31,9 @@ your instructions, your skills — are documented in SETUP.md but not installed.
 
 | Package | Provides | Notes |
 |---|---|---|
-| **@narumitw/pi-plan-mode** | Read-only plan mode | `plan_mode_question`, `plan_mode_complete`. Blocks edits except the plan file. `/plan export` writes the plan to Markdown. Review offers *Implement here / Start fresh / Save / Export*. |
+| **@narumitw/pi-plan-mode** | Read-only plan mode | Start with `/plan` or `/plan <request>`. `plan_mode_question`, `plan_mode_complete` support review; `/plan export` writes Markdown. Planning does not automatically create Tasks. |
 | **@tintinweb/pi-tasks** | Task list above the editor | `TaskCreate`, `TaskList`, `TaskGet`, `TaskUpdate`, `TaskOutput`, `TaskStop`, `TaskExecute`. Bidirectional `blocks`/`blockedBy` with cycle warnings. `TaskExecute` runs a task as a subagent. `/tasks` menu. |
-| **@tintinweb/pi-subagents** | `Agent` tool | Isolated subagent sessions, background by default, mid-run steering, resume, scheduled jobs, `SubagentWorkflow` scripts. Same author as pi-tasks — they talk over an event bus, so `agentType` on a task runs there. |
+| **@tintinweb/pi-subagents** | `Agent` tool | Background subagents, steering, resume, and scheduling; pi-tasks delegates through its event bus. This setup disables optional `SubagentWorkflow` and uses compact tool descriptions; ordinary subagents still work. See the settings example. |
 
 ### Providers
 
@@ -52,7 +54,7 @@ your instructions, your skills — are documented in SETUP.md but not installed.
 
 | Package | Provides | Notes |
 |---|---|---|
-| **pi-memory** | Persistent project memory | Pinned to `0.4.2`. Paired with `project-memory.ts` so each git root gets its own store. |
+| **pi-memory** | Persistent project memory and local search | Pinned to `0.4.2`, loaded only through `project-memory.ts`. Each project gets separate Markdown memory plus QMD config/index. Stable snapshots; background indexing; no automatic exit/transition summaries. |
 
 **Deliberately not installed:** `@gamaraan/todos-tool` (an OMP-style phased todo HUD —
 appealing, but 1 GitHub star) and a hand-written `pi-plan-todo` that has since been
@@ -99,13 +101,18 @@ semantics layer and the OCR built in.
 
 ## Local extensions
 
-Pi has no package for either, so `setup.sh` copies them into
-`~/.pi/agent/extensions/`.
+`setup.sh` copies these two local adapters into `~/.pi/agent/extensions/`.
+The last-model adapter also has a [standalone source repository](https://github.com/airudotsh/pi-last-model).
 
 | File | Why it exists |
 |---|---|
 | **last-model.ts** | Pi stores only a *startup default* (`Ctrl+S` in `/model`). This records the **last used** model + thinking level and restores them on the next `startup`. Skips restoration when you launch with `--model`/`--provider`. No open-source equivalent found. |
-| **project-memory.ts** | `pi-memory` has one global store; this adapter points it at `~/.pi/agent/memory/projects/<sha256(git-root)>/` so projects do not share memory. Sets `PI_MEMORY_*` before importing, and throws if the scope changes mid-process. |
+| **project-memory.ts** | Scopes memory to the nearest Git root, or launch directory outside Git. QMD config and SQLite index live in that store's `.qmd/`; downloaded models remain shared. Sets the environment before import and rejects a different scope in the same adapter instance. Fully restart Pi when changing projects. |
+
+QMD is optional for file-based memory and required for `memory_search`.
+The current reference version is **2.8.3**. First-time local model downloads and
+background embedding can take time and disk space; this is not a cloud search API.
+See [memory setup and recovery](SETUP.md#memory-search-and-isolation) for details.
 
 ---
 
@@ -122,17 +129,41 @@ Pi has no package for either, so `setup.sh` copies them into
 
 ---
 
+## Everyday workflow
+
+- Need to review a plan before implementation? Use `/plan <request>`, review it,
+  then choose implementation.
+- Small changes and questions: send a normal request.
+- The main agent creates and updates Tasks for multi-step work and decides when
+  to delegate. Plan approval does **not** mechanically generate a task list.
+- Task reminders are guidance, not an execution gate. Completed lists may be
+  auto-cleared by pi-tasks; disappearing completed tasks are not necessarily a failure.
+- Memory recall is explicit with stable snapshots: search relevant history and
+  read the matching source. Check `memory_status` before treating empty results as
+  proof that no memory exists.
+
 ## Restore on a new machine
 
 ```bash
 git clone https://github.com/airudotsh/piru
 cd piru
 ./setup.sh --dry-run     # see the plan
-./setup.sh               # do it
-pi                       # then /login for each provider
+./setup.sh --with-memory-search  # include optional local QMD search
+pi                              # then /login for each provider
 ```
 
-Then grant the MCP permissions above and restart Pi.
+Then grant the MCP permissions above and fully restart Pi. For file-only memory,
+use `./setup.sh` without the search option.
+
+## Verify this repository
+
+```bash
+bash -n setup.sh
+node --test tests/*.test.mjs  # Node 22.13+; no package installs or model calls
+```
+
+The tests use temporary settings, mocked installers, and a mocked pi-memory import;
+they do not change your Pi installation or index real memory.
 
 ## License
 
