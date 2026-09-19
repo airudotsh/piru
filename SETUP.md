@@ -211,7 +211,7 @@ Notes:
 
 ---
 
-## 4. Instructions and prompts
+## 5. Instructions and prompts
 
 Pi reads instructions from three places. This machine uses the first two.
 
@@ -283,7 +283,7 @@ checklist and write your own; keep them under version control in your own place.
 
 ---
 
-## 5. Verify
+## 6. Verify
 
 After a restart:
 
@@ -298,7 +298,7 @@ After a restart:
 | paste image (`ctrl+v`) | thumbnail above the editor |
 | `/settings` | theme, default model |
 
-## 6. Notes on this snapshot
+## 7. Notes on this snapshot
 - `auth.json` is never shared.
 - Skills live in `~/.agents/skills` (shared mount) — not part of this repo.
 - `models.json` on this machine also defines two local providers whose keys come from
