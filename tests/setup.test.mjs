@@ -62,6 +62,10 @@ test('install disables direct pi-memory loading and preserves unrelated settings
   }, null, 2) + '\n');
   success(f.run('--no-mcp'));
   const settings = JSON.parse(readFileSync(settingsPath, 'utf8'));
+  const sources = settings.packages.map(p => typeof p === 'string' ? p : p.source);
+  assert.ok(!sources.some(source => source.startsWith('npm:@tintinweb/pi-subagents')));
+  assert.ok(sources.includes('npm:@tintinweb/pi-tasks'));
+  assert.ok(sources.includes('npm:@narumitw/pi-plan-mode'));
   assert.equal(settings.theme, 'keep-me');
   assert.equal(settings.defaultModel, 'keep-model');
   assert.deepEqual(settings.packages.find(p => p.source === 'npm:pi-memory@0.4.2'), {

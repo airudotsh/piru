@@ -37,7 +37,6 @@ pi install npm:pi-open-tui
 pi install npm:pi-session-summary
 pi install npm:pi-image-preview
 pi install npm:pi-antigravity
-pi install npm:@tintinweb/pi-subagents
 pi install npm:pi-memory@0.4.2
 pi install git:github.com/NVlabs/SoL-Pi@bd005888b9b8a3fcdb511feb91fc27d3dfa8f2b1
 pi install npm:@narumitw/pi-plan-mode
@@ -49,6 +48,18 @@ adapter must load it, after choosing the project's memory directory. It backs up
 `settings.json` before making this narrow change and preserves unrelated settings.
 For manual installation, apply the package filter shown in §4 before starting Pi.
 
+### Updating an older installation
+
+`setup.sh` installs the current package list; it does not uninstall packages from
+older snapshots. To remove the previously included subagent package:
+
+```bash
+pi remove npm:@tintinweb/pi-subagents
+```
+
+Archive the obsolete `~/.pi/agent/subagents.json` if present, remove outdated
+personal delegation instructions, and fully restart Pi. Tasks and `/plan` remain.
+
 ### Why each one
 
 | Package | What it gives you |
@@ -59,8 +70,7 @@ For manual installation, apply the package filter shown in §4 before starting P
 | `pi-devin` | Devin provider (Claude/GPT/Gemini via Devin) |
 | `pi-antigravity` | Google Antigravity / Cloud Code Assist models (Gemini, Claude, GPT-OSS) via **Google login** |
 | `@narumitw/pi-plan-mode` | **Read-only `/plan` mode** — explore, write a plan, get approval before edits. `/plan export` writes the plan to Markdown |
-| `@tintinweb/pi-tasks` | **Task list above the editor** with dependencies (`blocked by #1`), spinners, and `TaskExecute` to run a task as a subagent |
-| `@tintinweb/pi-subagents` | `Agent` tool — spawn isolated subagents, run them in the background, steer mid-run. Pairs with `pi-tasks` |
+| `@tintinweb/pi-tasks` | **Task list above the editor** with dependencies (`blocked by #1`), status updates, and the `/tasks` menu |
 | `pi-memory` | Persistent project memory |
 | `SoL-Pi` | Context/observation management |
 | `pi-session-summary` | Generates a one-line session name from the first request, shown in the footer |
@@ -200,24 +210,6 @@ This keeps it from launching one (the URL is still printed if you want it).
 { "app.message.followUp": ["ctrl+enter", "alt+enter"] }
 ```
 
-### `subagents.json` — optional workflow and description settings
-
-```json
-{ "workflowsEnabled": false, "toolDescriptionMode": "compact" }
-```
-
-This disables scripted `SubagentWorkflow`, not ordinary `Agent` delegation,
-background execution, steering, or resume. Compact mode shortens the Agent tool's
-description; do not assume a fixed token saving across versions. Fully restart Pi
-to verify the loaded tools after changing it. This example is not auto-installed.
-
-The current delegation preference is `bai/deepseek-v4.1-flash` with high thinking.
-It is an instruction, not a change to the main model or to all agent profiles.
-With the installed `Agent` tool, use separate `model` and `thinking` arguments.
-A profile-pinned model takes precedence over a call's model argument. Model lookup
-fallback is not API-error failover: b.ai → opencode-go → parent is **not** an
-installed automatic runtime chain.
-
 ### `sol-pi.json` — observation archives only
 
 ```json
@@ -325,21 +317,9 @@ This snapshot uses `APPEND_SYSTEM.md`; project instructions depend on the reposi
 
 ### `~/.pi/agent/APPEND_SYSTEM.md` — personal, always on
 
-Plain Markdown appended to Pi's system prompt. Sections this machine keeps:
-
-```
-User and communication      how to address me, language, tone
-Fixed environment           which terminal / browser / CLI to use, and what not to
-Work and verification       inspect first, verify the smallest scope, report evidence
-Approval and safety         what needs explicit approval; never handle credentials
-Browser — … CLI             which browser automation tool is authoritative
-Delegation and parallel work  subagent rules, worktree isolation
-Project context and session names
-Existing shared resources and knowledge
-Project memory and output archives
-```
-
-Keep it short — every line rides on every request. Start minimal:
+Keep personal preferences, approval boundaries, and machine-specific paths here.
+Avoid restating Pi's built-in tool instructions; every line rides on each request.
+Start minimal:
 
 ```markdown
 # Pi instructions
@@ -402,7 +382,6 @@ After a restart:
 | `/plan <request>` | starts planning; review before implementation; planning tools enforce the active mode |
 | `/plan export` | writes the plan to a Markdown file |
 | `/tasks` | task widget above the editor; `blocked by` shows dependencies |
-| `/agents` | subagent list; scripted Workflows absent if the optional setting above is applied |
 | `/mcp` | macos-computer-use, 146 tools |
 | `/open-tui` | footer/telemetry settings |
 | paste image (`ctrl+v`) | thumbnail above the editor |
@@ -411,8 +390,8 @@ After a restart:
 | `memory_search` | search a non-sensitive fact already saved in this project's memory |
 
 For everyday work: use `/plan <request>` when you want to review the approach;
-use a normal request for small fixes and questions. The main agent manages Tasks
-and decides when to delegate. Plan approval does not automatically generate Tasks,
+use a normal request for small fixes and questions. Choose the main model in Pi
+and track multi-step work with Tasks. Plan approval does not automatically generate Tasks,
 and reminders do not block implementation. pi-tasks defaults to clearing an
 all-completed list after four turns or at the next post-run task batch.
 

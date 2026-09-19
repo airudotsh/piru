@@ -113,6 +113,6 @@ cat <<'NOTES'
      not functional, so they are not installed here
    - extra MCP servers: declare them in mcp.json with their own command
 
-Fully restart Pi, then check /plan, /tasks, /agents, /mcp and memory_status.
+Fully restart Pi, then check /plan, /tasks, /mcp and memory_status.
 Memory files and indexes are never copied by this installer.
 NOTES

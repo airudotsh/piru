@@ -17,7 +17,7 @@ are documented in SETUP.md but not installed. Memory contents are never copied.
 
 ---
 
-## Packages (12)
+## Packages (11)
 
 ### Search and context
 
@@ -32,8 +32,7 @@ are documented in SETUP.md but not installed. Memory contents are never copied.
 | Package | Provides | Notes |
 |---|---|---|
 | **@narumitw/pi-plan-mode** | Read-only plan mode | Start with `/plan` or `/plan <request>`. `plan_mode_question`, `plan_mode_complete` support review; `/plan export` writes Markdown. Planning does not automatically create Tasks. |
-| **@tintinweb/pi-tasks** | Task list above the editor | `TaskCreate`, `TaskList`, `TaskGet`, `TaskUpdate`, `TaskOutput`, `TaskStop`, `TaskExecute`. Bidirectional `blocks`/`blockedBy` with cycle warnings. `TaskExecute` runs a task as a subagent. `/tasks` menu. |
-| **@tintinweb/pi-subagents** | `Agent` tool | Background subagents, steering, resume, and scheduling; pi-tasks delegates through its event bus. This setup disables optional `SubagentWorkflow` and uses compact tool descriptions; ordinary subagents still work. See the settings example. |
+| **@tintinweb/pi-tasks** | Task list above the editor | `TaskCreate`, `TaskList`, `TaskGet`, `TaskUpdate`, dependencies, and the `/tasks` menu. `TaskExecute` remains registered by the package but has no subagent backend in this setup. |
 
 ### Providers
 
@@ -134,8 +133,8 @@ See [memory setup and recovery](SETUP.md#memory-search-and-isolation) for detail
 - Need to review a plan before implementation? Use `/plan <request>`, review it,
   then choose implementation.
 - Small changes and questions: send a normal request.
-- The main agent creates and updates Tasks for multi-step work and decides when
-  to delegate. Plan approval does **not** mechanically generate a task list.
+- Choose the main model in Pi and use Tasks to track multi-step work.
+  Plan approval does **not** mechanically generate a task list.
 - Task reminders are guidance, not an execution gate. Completed lists may be
   auto-cleared by pi-tasks; disappearing completed tasks are not necessarily a failure.
 - Memory recall is explicit with stable snapshots: search relevant history and
