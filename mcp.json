@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "macos-computer-use": {
+      "command": "macos-computer-use-mcp"
+    }
+  }
+}

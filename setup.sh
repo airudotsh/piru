@@ -1,22 +1,30 @@
 #!/usr/bin/env bash
-# pi-setup — install the packages from packages.txt and copy the local extensions.
+# pi-setup — install packages, local extensions, and MCP servers.
 #
 # Usage:
-#   ./setup.sh            # install + copy
+#   ./setup.sh            # install everything
 #   ./setup.sh --dry-run  # show what would change, touch nothing
+#   ./setup.sh --no-mcp   # skip MCP server installation
 #
-# Config files are NOT copied. See SETUP.md — auth and per-machine settings
-# (models.json, mcp.json, …) are described there instead.
+# Personal choices (which model, which instructions, which skills) are NOT set
+# here. See SETUP.md.
 
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 AGENT_DIR="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"
 DRY=0
-[ "${1:-}" = "--dry-run" ] && DRY=1
+SKIP_MCP=0
+for arg in "$@"; do
+  case "$arg" in
+    --dry-run) DRY=1 ;;
+    --no-mcp)  SKIP_MCP=1 ;;
+  esac
+done
 
 say() { printf '  %s\n' "$*"; }
 run() { if [ "$DRY" = 1 ]; then say "[dry] $*"; else eval "$@"; fi; }
+have() { command -v "$1" >/dev/null 2>&1; }
 
 echo "pi-setup → $AGENT_DIR"
 [ "$DRY" = 1 ] && echo "  (dry run — nothing will be written)"
@@ -44,14 +52,44 @@ for f in "$HERE"/extensions/*.ts; do
   run "cp '$f' '$AGENT_DIR/extensions/'"
 done
 
-# ── 3. notes ─────────────────────────────────────────────────────────
+# ── 3. MCP servers ───────────────────────────────────────────────────
+echo
+if [ "$SKIP_MCP" = 1 ]; then
+  echo "3) MCP servers — skipped (--no-mcp)"
+else
+  echo "3) MCP servers"
+  if have uv; then
+    run "uv tool install macos-computer-use-mcp"
+    say "binary → $(command -v macos-computer-use-mcp 2>/dev/null || echo '~/.local/bin/macos-computer-use-mcp')"
+  else
+    say "⚠ uv not found — install it, then re-run: uv tool install macos-computer-use-mcp"
+    say "   (macos-computer-use-mcp is a Python package; uv is the simplest runner)"
+  fi
+  if [ -f "$HERE/mcp.json" ]; then
+    if [ -f "$AGENT_DIR/mcp.json" ] && ! cmp -s "$HERE/mcp.json" "$AGENT_DIR/mcp.json"; then
+      run "cp '$AGENT_DIR/mcp.json' '$AGENT_DIR/mcp.json.bak.$(date +%Y%m%d-%H%M%S)'"
+      say "backed up existing mcp.json"
+    fi
+    run "cp '$HERE/mcp.json' '$AGENT_DIR/mcp.json'"
+  fi
+  cat <<'MCPNOTE'
+  Permissions the server needs (grant to your TERMINAL app):
+    System Settings → Privacy & Security →
+      Screen Recording   (screenshots)
+      Accessibility      (mouse, keyboard, window, UI elements)
+      Automation         (Calendar, Mail, Safari, Notes …)
+  It runs on demand; `pi /mcp` shows the server and its tool count.
+MCPNOTE
+fi
+
+# ── 4. notes ─────────────────────────────────────────────────────────
 cat <<'NOTES'
 
-3) what this does NOT do
-   - config files: see SETUP.md (models.json, mcp.json, open-tui.json, …)
+4) what this does NOT do
    - authentication: run `pi`, then /login per provider
-   - skills: ~/.agents/skills is a shared mount, not copied here
-   - MCP servers: install the server binary, then declare it in mcp.json
+   - model choices, instructions, skills: see SETUP.md — those are personal,
+     not functional, so they are not installed here
+   - extra MCP servers: declare them in mcp.json with their own command
 
-Restart Pi after this script, then check /plan, /tasks, /agents, /mcp.
+Restart Pi, then check /plan, /tasks, /agents, /mcp.
 NOTES
