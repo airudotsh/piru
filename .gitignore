@@ -1,0 +1,8 @@
+# never commit credentials
+auth.json
+*api-key*
+*.key
+
+# machine-specific
+node_modules/
+.DS_Store

@@ -1,0 +1,12 @@
+git:github.com/kashyab12/pi-devin
+npm:pi-web-access
+npm:pi-mcp-adapter
+npm:pi-open-tui
+npm:pi-session-summary
+npm:pi-image-preview
+npm:pi-antigravity
+npm:@tintinweb/pi-subagents
+npm:pi-memory@0.4.2
+git:github.com/NVlabs/SoL-Pi@bd005888b9b8a3fcdb511feb91fc27d3dfa8f2b1
+npm:@narumitw/pi-plan-mode
+npm:@tintinweb/pi-tasks
