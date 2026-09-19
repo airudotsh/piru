@@ -211,6 +211,78 @@ Notes:
 
 ---
 
+## 4. Instructions and prompts
+
+Pi reads instructions from three places. This machine uses the first two.
+
+### `~/.pi/agent/APPEND_SYSTEM.md` — personal, always on
+
+Plain Markdown appended to Pi's system prompt. Sections this machine keeps:
+
+```
+User and communication      how to address me, language, tone
+Fixed environment           which terminal / browser / CLI to use, and what not to
+Work and verification       inspect first, verify the smallest scope, report evidence
+Approval and safety         what needs explicit approval; never handle credentials
+Browser — … CLI             which browser automation tool is authoritative
+Delegation and parallel work  subagent rules, worktree isolation
+Project context and session names
+Existing shared resources and knowledge
+Project memory and output archives
+```
+
+Keep it short — every line rides on every request. Start minimal:
+
+```markdown
+# Pi instructions
+
+## Communication
+- Address me as <name>. Reply in <language>, conclusion first.
+
+## Verification
+- For any change: inspect the files, make the edit, verify the smallest scope
+  that proves it works, then report evidence.
+
+## Approval
+- Ask before commit, push, PR, merge, deploy, or destructive operations.
+- Never handle credentials on my behalf.
+```
+
+### `AGENTS.md` — project-level, discovered automatically
+
+Pi loads `AGENTS.md` from the working directory and ancestor directories (up to the
+git root), plus `~/.agents/AGENTS.md` globally. Project rules override global ones.
+Use it for repo conventions: branch policy, test commands, record-keeping.
+
+On this machine the global one lives in a **shared network mount**
+(`~/.agents/AGENTS.md`), edited on the host that owns it — not a local file.
+
+### Prompt templates — `/name` shortcuts (not used here)
+
+Markdown snippets that expand into a full prompt. Drop a file in
+`~/.pi/agent/prompts/<name>.md` and type `/name`:
+
+```markdown
+---
+description: Review staged git changes
+---
+Review the staged changes (`git diff --cached`). Focus on:
+- Correctness bugs
+- Missing tests
+- Anything that looks like an accidental change
+```
+
+Also discoverable from `.pi/prompts/*.md` (project) and packages. This machine has
+none configured, so only package-provided ones appear.
+
+### What is not portable
+
+`APPEND_SYSTEM.md` and `AGENTS.md` are **not** shipped in this repo — they encode
+machine-specific paths and personal working style. Treat the list above as a
+checklist and write your own; keep them under version control in your own place.
+
+---
+
 ## 5. Verify
 
 After a restart:
@@ -227,7 +299,6 @@ After a restart:
 | `/settings` | theme, default model |
 
 ## 6. Notes on this snapshot
-
 - `auth.json` is never shared.
 - Skills live in `~/.agents/skills` (shared mount) — not part of this repo.
 - `models.json` on this machine also defines two local providers whose keys come from

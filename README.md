@@ -11,7 +11,8 @@ How I run Pi — the packages, the two local extensions, and the settings worth 
 ## What's here
 
 ```
-SETUP.md          install order, per-package rationale, config file guide, verification
+SETUP.md          install order, per-package rationale, config file guide,
+                  instructions & prompts, verification
 packages.txt      the 12 packages, one per line
 setup.sh          installs packages and copies extensions (--dry-run supported)
 extensions/       the 2 local extensions Pi has no package for
