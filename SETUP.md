@@ -34,7 +34,6 @@ pi install git:github.com/kashyab12/pi-devin
 pi install npm:pi-web-access
 pi install npm:pi-mcp-adapter
 pi install npm:pi-open-tui
-pi install npm:pi-session-summary
 pi install npm:pi-image-preview
 pi install npm:pi-antigravity
 pi install npm:pi-memory@0.4.2
@@ -73,8 +72,8 @@ personal delegation instructions, and fully restart Pi. Tasks and `/plan` remain
 | `@tintinweb/pi-tasks` | **Task list above the editor** with dependencies (`blocked by #1`), status updates, and the `/tasks` menu |
 | `pi-memory` | Persistent project memory |
 | `SoL-Pi` | Context/observation management |
-| `pi-session-summary` | Generates a one-line session name from the first request, shown in the footer |
 | `pi-image-preview` | Renders pasted images as thumbnails above the editor |
+| `session-recap.ts` (local) | OMP-style idle recap in a single line; replaces `pi-session-summary` |
 
 **Related but not installed:** `@gamaraan/todos-tool` (an OMP-style phased todo HUD —
 nice, but 1 GitHub star) and the retired `pi-plan-todo` (see its own STATUS.md).
@@ -185,15 +184,25 @@ terminal. Check with `/mcp`.
 `footerSegments` controls the bottom bar; set `sessionName: false` if you would
 rather see the name only in the terminal title.
 
-### `session-summary.json` — which model writes the session name
+### `session-recap.json` — the OMP-style idle recap
 
 ```json
-{ "provider": "antigravity", "model": "gemini-3.8-flash", "showWidget": true }
+{
+  "enabled": true,
+  "idleSeconds": 240,
+  "maxChars": 280,
+  "maxTokens": 200,
+  "sessionTitle": true,
+  "provider": "antigravity",
+  "model": "gemini-3.8-flash"
+}
 ```
 
-Without this, the package auto-detects a cheap model from a built-in list
-(`gpt-5.4-nano`, `gemini-3-flash`, `claude-haiku-4.5`, …). Pick a small model —
-summarizing a first request does not need a frontier model.
+Every field is optional. `session-recap.ts` waits `idleSeconds` after a run
+settles, then asks the model for a ~5-word title and a short plain recap. It
+collapses whitespace and truncates to `maxChars`, so the line can never wrap.
+Leave `provider`/`model` unset to use the session's active model. Set
+`sessionTitle: false` to skip naming the session. `/recap` forces one now.
 
 ### `web-search.json` — stop the curator from stealing the browser
 
@@ -235,17 +244,21 @@ every request.
 
 ## 4. Local extensions
 
-These two local adapters are copied from `extensions/` into
+These three local adapters are copied from `extensions/` into
 `~/.pi/agent/extensions/` by `setup.sh`. The last-model code also has a standalone
 source repository at <https://github.com/airudotsh/pi-last-model>.
 
 | File | Why it exists |
 |---|---|
 | `last-model.ts` | Pi stores only a *startup default* (`Ctrl+S` in `/model`). This records the **last used** model + thinking level and restores them on the next `startup`. No open-source equivalent found. |
+| `session-recap.ts` | Replaces `pi-session-summary`, which showed the raw Markdown compaction summary in a widget and wrapped onto several lines. This generates a dedicated plain recap instead and collapses whitespace, so the line is always single. See §3 for its config. |
 | `project-memory.ts` | `pi-memory` has one global store. This adapter points it at `~/.pi/agent/memory/projects/<sha256(git-root)>/` so each project gets separate memory. Required if you use `pi-memory`. |
 
 Notes:
 - `last-model.ts` skips restoration when you launch with `--model` / `--provider`.
+- `session-recap.ts` runs only while the editor is empty and Pi is idle; any input
+  or new run cancels it. Removing `pi-session-summary` also removes its
+  `/summary:*` commands — use `/recap` instead.
 - `project-memory.ts` sets its environment before importing `pi-memory`, and
   rejects a different memory scope in the same adapter instance. Fully restart Pi
   when switching projects; do not rely on `/reload` to clear imported module state.

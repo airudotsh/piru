@@ -73,6 +73,9 @@ test('install disables direct pi-memory loading and preserves unrelated settings
   });
   assert.equal(readFileSync(join(f.agent, 'extensions/project-memory.ts'), 'utf8'),
     readFileSync(join(repo, 'extensions/project-memory.ts'), 'utf8'));
+  assert.equal(readFileSync(join(f.agent, 'extensions/session-recap.ts'), 'utf8'),
+    readFileSync(join(repo, 'extensions/session-recap.ts'), 'utf8'));
+  assert.ok(!sources.some(source => source.startsWith('npm:pi-session-summary')));
   assert.equal(readdirSync(f.agent).filter(n => n.startsWith('settings.json.bak.')).length, 1);
   const saved = readFileSync(settingsPath, 'utf8');
   success(f.run('--no-mcp'));

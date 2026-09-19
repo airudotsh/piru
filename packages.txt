@@ -2,7 +2,6 @@ git:github.com/kashyab12/pi-devin
 npm:pi-web-access
 npm:pi-mcp-adapter
 npm:pi-open-tui
-npm:pi-session-summary
 npm:pi-image-preview
 npm:pi-antigravity
 npm:pi-memory@0.4.2

@@ -17,7 +17,7 @@ are documented in SETUP.md but not installed. Memory contents are never copied.
 
 ---
 
-## Packages (11)
+## Packages (10)
 
 ### Search and context
 
@@ -46,7 +46,6 @@ are documented in SETUP.md but not installed. Memory contents are never copied.
 | Package | Provides | Notes |
 |---|---|---|
 | **pi-open-tui** | Header, footer, telemetry, thinking peek | `/open-tui` → General / Appearance / Footer / Telemetry. This setup disables the per-turn telemetry line. |
-| **pi-session-summary** | Session name from the first request | Writes a one-line summary and sets it as the session name (footer + `/resume`). `/summary:cost`. |
 | **pi-image-preview** | Pasted-image thumbnails | `Ctrl+V` an image → thumbnail above the editor. Works in Kitty and Ghostty. |
 
 ### Memory
@@ -100,12 +99,13 @@ semantics layer and the OCR built in.
 
 ## Local extensions
 
-`setup.sh` copies these two local adapters into `~/.pi/agent/extensions/`.
+`setup.sh` copies these three local adapters into `~/.pi/agent/extensions/`.
 The last-model adapter also has a [standalone source repository](https://github.com/airudotsh/pi-last-model).
 
 | File | Why it exists |
 |---|---|
 | **last-model.ts** | Pi stores only a *startup default* (`Ctrl+S` in `/model`). This records the **last used** model + thinking level and restores them on the next `startup`. Skips restoration when you launch with `--model`/`--provider`. No open-source equivalent found. |
+| **session-recap.ts** | Replaces `pi-session-summary`. An **OMP-style idle recap**: after a run settles and the session stays idle, one short plain-text recap is generated and shown as a **single** line below the editor. `/recap` runs it on demand. Config: `session-recap.json`. |
 | **project-memory.ts** | Scopes memory to the nearest Git root, or launch directory outside Git. QMD config and SQLite index live in that store's `.qmd/`; downloaded models remain shared. Sets the environment before import and rejects a different scope in the same adapter instance. Fully restart Pi when changing projects. |
 
 QMD is optional for file-based memory and required for `memory_search`.
@@ -161,8 +161,9 @@ bash -n setup.sh
 node --test tests/*.test.mjs  # Node 22.13+; no package installs or model calls
 ```
 
-The tests use temporary settings, mocked installers, and a mocked pi-memory import;
-they do not change your Pi installation or index real memory.
+The tests use temporary settings, mocked installers, a mocked pi-memory import,
+and the recap extension loaded with its two Pi imports stubbed; they do not change
+your Pi installation, call a model, or index real memory.
 
 ## License
 
